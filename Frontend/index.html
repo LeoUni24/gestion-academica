@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Gestión Académica - Registro</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+body { font-family: Arial, sans-serif; max-width:920px; margin:20px auto; padding:10px; }
+input, button { padding:8px; margin:4px 0; }
+.fila { display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap: wrap; }
+.registro { border-bottom:1px solid #ddd; padding:8px 0; }
+.small { font-size:0.9em; color:#555; }
+.actions button { margin-left:6px; }
+#mensaje { margin-top:10px; color:green; }
+#formEditar { margin-top:8px; padding:8px; border:1px solid #ccc; background:#fafafa; }
+</style>
+</head>
+<body>
+<h1>Registro Académico</h1>
+
+<section>
+<h3>Agregar nuevo estudiante</h3>
+<form id="formCrear" class="fila" onsubmit="return false;">
+  <input id="nombre" placeholder="Nombre" required>
+  <input id="apellido" placeholder="Apellido" required>
+  <input id="direccion" placeholder="Dirección">
+  <input id="telefono" placeholder="Teléfono">
+  <input id="email" placeholder="Email">
+  <button id="btnCrear">Agregar</button>
+</form>
+</section>
+
+<section style="margin-top:16px;">
+<h3>Buscar por ID</h3>
+<div class="fila">
+  <input id="buscarId" type="number" placeholder="ID">
+  <button id="btnBuscar">Buscar</button>
+  <button id="btnRefrescar">Refrescar lista</button>
+</div>
+<div id="resultadoBusqueda" class="small"></div>
+</section>
+
+<section style="margin-top:16px;">
+<h3>Lista de estudiantes</h3>
+<div id="lista"></div>
+</section>
+
+<section id="formEditar" style="display:none;">
+<h3>Editar estudiante</h3>
+<form id="editarForm" onsubmit="return false;">
+  <input id="editId" readonly style="width:60px;">
+  <input id="editNombre" placeholder="Nombre" required>
+  <input id="editApellido" placeholder="Apellido" required>
+  <input id="editDireccion" placeholder="Dirección">
+  <input id="editTelefono" placeholder="Teléfono">
+  <input id="editEmail" placeholder="Email">
+  <button id="btnActualizar">Actualizar</button>
+  <button id="btnCancelar" type="button">Cancelar</button>
+</form>
+</section>
+
+<div id="mensaje"></div>
+
+<script>
+const API = 'http://localhost:1337/api/estudiantes';
+const listaEl = document.getElementById('lista');
+const mensajeEl = document.getElementById('mensaje');
+
+
+async function mostrarMensaje(text, ok=true){
+  mensajeEl.style.color = ok ? 'green' : 'crimson';
+  mensajeEl.textContent = text;
+  setTimeout(()=> mensajeEl.textContent = '', 3000);
+}
+
+
+async function cargarTodos(){
+  try{
+    const res = await fetch(API);
+    const json = await res.json();
+    if(!json.data) { listaEl.innerHTML = 'Respuesta inesperada'; return; }
+    const items = json.data; 
+    listaEl.innerHTML = items.map(r => `
+      <div class="registro">
+        <strong>${r.id}. ${r.nombre || ''} ${r.apellido || ''}</strong>
+        <div class="small">${r.direccion || '-'} — ${r.telefono || '-'} — ${r.email || '-'}</div>
+        <div class="actions small">
+          <button onclick="editar(${r.id})">Editar</button>
+          <button onclick="borrar(${r.id})">Eliminar</button>
+          <button onclick="ver(${r.id})">Ver</button>
+        </div>
+      </div>
+    `).join('');
+  }catch(err){
+    console.error(err);
+    mostrarMensaje('Error cargando registros', false);
+  }
+}
+
+
+document.getElementById('btnCrear').addEventListener('click', async () => {
+  const nombre = document.getElementById('nombre').value.trim();
+  const apellido = document.getElementById('apellido').value.trim();
+  const direccion = document.getElementById('direccion').value.trim();
+  const telefono = document.getElementById('telefono').value.trim();
+  const email = document.getElementById('email').value.trim();
+
+  if(!nombre || !apellido){ mostrarMensaje('Nombre y Apellido son obligatorios', false); return; }
+
+  try{
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ data: { nombre, apellido, direccion, telefono, email } })
+    });
+    if(res.ok){
+      const nuevo = await res.json();
+      mostrarMensaje(`Creado ID ${nuevo.data.id}`);
+      document.getElementById('formCrear').reset();
+      cargarTodos();
+    } else {
+      const err = await res.json();
+      mostrarMensaje(err.error?.message || 'Error al crear', false);
+    }
+  }catch(e){
+    mostrarMensaje('Error al conectar con el servidor', false);
+  }
+});
+
+
+async function ver(id){
+  try{
+    const res = await fetch(`${API}/${id}`);
+    if(res.ok){
+      const r = await res.json();
+      const reg = r.data; // directamente
+      alert(`ID ${reg.id}\nNombre: ${reg.nombre || ''} ${reg.apellido || ''}\nDirección: ${reg.direccion || '-'}\nTeléfono: ${reg.telefono || '-'}\nEmail: ${reg.email || '-'}`);
+    } else mostrarMensaje('Registro no encontrado', false);
+  }catch(e){ mostrarMensaje('Error al conectar', false); }
+}
+
+
+document.getElementById('btnBuscar').addEventListener('click', async () => {
+  const id = parseInt(document.getElementById('buscarId').value);
+  if(!id){ mostrarMensaje('Ingresá un ID válido', false); return; }
+  try {
+    const res = await fetch(`${API}/${id}`);
+    const cont = document.getElementById('resultadoBusqueda');
+    if(res.ok){
+      const r = await res.json();
+      const reg = r.data;
+      cont.textContent = `ID ${reg.id} — ${reg.nombre || ''} ${reg.apellido || ''} — ${reg.direccion || '-'} — ${reg.telefono || '-'} — ${reg.email || '-'}`;
+    } else cont.textContent = 'Registro no encontrado';
+  } catch(e){ mostrarMensaje('Error al conectar', false); }
+});
+
+
+document.getElementById('btnRefrescar').addEventListener('click', cargarTodos);
+
+
+async function borrar(id){
+  if(!confirm('¿Eliminar registro ID ' + id + '?')) return;
+  try{
+    const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+    if(res.ok){
+      mostrarMensaje('Registro eliminado');
+      cargarTodos();
+    } else {
+      const e = await res.json();
+      mostrarMensaje(e.error?.message || 'No se pudo eliminar', false);
+    }
+  }catch(e){ mostrarMensaje('Error al conectar', false); }
+}
+
+
+async function editar(id){
+  try{
+    const res = await fetch(`${API}/${id}`);
+    if(!res.ok){ mostrarMensaje('Registro no encontrado', false); return; }
+    const r = await res.json();
+    const reg = r.data;
+    document.getElementById('formEditar').style.display = 'block';
+    document.getElementById('editId').value = reg.id;
+    document.getElementById('editNombre').value = reg.nombre || '';
+    document.getElementById('editApellido').value = reg.apellido || '';
+    document.getElementById('editDireccion').value = reg.direccion || '';
+    document.getElementById('editTelefono').value = reg.telefono || '';
+    document.getElementById('editEmail').value = reg.email || '';
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  }catch(e){ mostrarMensaje('Error al conectar', false); }
+}
+
+
+document.getElementById('btnCancelar').addEventListener('click', () => {
+  document.getElementById('formEditar').style.display = 'none';
+});
+
+
+document.getElementById('btnActualizar').addEventListener('click', async () => {
+  const id = parseInt(document.getElementById('editId').value);
+  const nombre = document.getElementById('editNombre').value.trim();
+  const apellido = document.getElementById('editApellido').value.trim();
+  const direccion = document.getElementById('editDireccion').value.trim();
+  const telefono = document.getElementById('editTelefono').value.trim();
+  const email = document.getElementById('editEmail').value.trim();
+
+  if(!nombre || !apellido){ mostrarMensaje('Nombre y Apellido son obligatorios', false); return; }
+
+  try{
+    const res = await fetch(`${API}/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ data: { nombre, apellido, direccion, telefono, email } })
+    });
+    if(res.ok){
+      mostrarMensaje(`Registro ${id} actualizado`);
+      document.getElementById('formEditar').style.display = 'none';
+      cargarTodos();
+    } else {
+      const e = await res.json();
+      mostrarMensaje(e.error?.message || 'No se pudo actualizar', false);
+    }
+  }catch(e){ mostrarMensaje('Error al conectar', false); }
+});
+
+cargarTodos();
+</script>
+</body>
+</html>
